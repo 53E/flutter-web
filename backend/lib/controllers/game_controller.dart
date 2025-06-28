@@ -8,46 +8,57 @@ import '../services/ai_service.dart';
 import '../services/score_service.dart';
 
 class GameController {
-  static Future<Map<String, dynamic>> startGame(HttpRequest req, HttpResponse res) async {
+  static Future<Map<String, dynamic>> startGame(
+    HttpRequest req, 
+    HttpResponse res
+  ) async {
     try {
       final gameId = DateTime.now().millisecondsSinceEpoch.toString();
       final startWord = await AIService.generateStartWord();
       
+      // 게임 세션 생성 (시작 단어 포함)
       await DatabaseManager.database.rawInsert(
-        'INSERT INTO game_sessions (id, current_stage, score, status) VALUES (?, ?, ?, ?)',
-        [gameId, 1, 0, 'active']
+        'INSERT INTO game_sessions (id, current_stage, score, player_turns, status, used_words) VALUES (?, ?, ?, ?, ?, ?)',
+        [gameId, 1, 0, 0, 'active', startWord]
       );
       
-      print('🎮 새 게임 시작: $gameId');
+      print('🎮 새 게임 시작: $gameId, 시작 단어: $startWord');
       
       return {
         'success': true,
         'gameId': gameId,
-        'startWord': startWord,
+        'aiWord': startWord,
         'stage': 1,
-        'message': '게임이 시작되었습니다! 첫 단어는 "$startWord"입니다.'
+        'message': 'AI가 "$startWord"(으)로 게임을 시작했습니다!',
+        'turn': 'player',
+        'usedWords': [startWord],
+        'playerTurns': 0,
+        'score': 0
       };
     } catch (e) {
       print('❌ 게임 시작 오류: $e');
       return {
         'success': false,
-        'message': '게임 시작에 실패했습니다: $e'
+        'message': '게임 시작 실패: $e'
       };
     }
   }
   
-  static Future<Map<String, dynamic>> submitWord(HttpRequest req, HttpResponse res) async {
+  static Future<Map<String, dynamic>> submitWord(
+    HttpRequest req, 
+    HttpResponse res
+  ) async {
     try {
       final body = await utf8.decoder.bind(req).join();
       final data = json.decode(body);
       
       final gameId = data['gameId'] as String;
       final playerWord = data['word'] as String;
-      final previousWord = data['previousWord'] as String? ?? '';
       final responseTime = data['responseTime'] as int? ?? 5000;
       
-      print('📝 단어 제출: $playerWord (게임: $gameId)');
+      print('📝 플레이어 단어 제출: $playerWord (게임: $gameId)');
       
+      // 게임 세션 확인
       final sessionResult = await DatabaseManager.database.rawQuery(
         'SELECT * FROM game_sessions WHERE id = ? AND status = ?',
         [gameId, 'active']
@@ -60,8 +71,17 @@ class GameController {
         };
       }
       
-      final session = GameSession.fromJson(sessionResult.first);
+      final sessionData = sessionResult.first;
+      final usedWordsString = sessionData['used_words'] as String? ?? '';
+      final usedWords = usedWordsString.split(',').where((w) => w.isNotEmpty).toList();
+      final lastWord = usedWords.isNotEmpty ? usedWords.last : '';
+      final currentScore = sessionData['score'] as int? ?? 0;
+      final currentPlayerTurns = sessionData['player_turns'] as int? ?? 0;
       
+      print('🔍 사용된 단어들: $usedWords');
+      print('🔍 마지막 단어: $lastWord');
+      
+      // 1. 단어 유효성 검증
       if (!(await WordService.validateWord(playerWord))) {
         return {
           'success': false,
@@ -70,8 +90,18 @@ class GameController {
         };
       }
       
-      if (previousWord.isNotEmpty && !WordService.validateWordChain(previousWord, playerWord)) {
-        final expectedChar = previousWord[previousWord.length - 1];
+      // 2. 중복 단어 검증
+      if (usedWords.contains(playerWord)) {
+        return {
+          'success': false,
+          'message': '"$playerWord"는 이미 사용된 단어입니다',
+          'gameOver': false
+        };
+      }
+      
+      // 3. 끝말잇기 규칙 검증
+      if (lastWord.isNotEmpty && !WordService.validateWordChain(lastWord, playerWord)) {
+        final expectedChar = lastWord[lastWord.length - 1];
         return {
           'success': false,
           'message': '"$expectedChar"(으)로 시작하는 단어를 입력해주세요',
@@ -79,66 +109,45 @@ class GameController {
         };
       }
       
-      final wordScore = ScoreService.calculateWordScore(
-        word: playerWord,
-        stage: session.currentStage,
-        responseTime: responseTime,
-        consecutiveCorrect: 1,
-      );
+      // 4. 플레이어 단어 추가
+      usedWords.add(playerWord);
       
-      final newScore = session.score + wordScore;
-      final aiResponse = await AIService.generateResponse(playerWord, session.currentStage);
+      // 5. 점수와 턴 계산
+      final wordScore = playerWord.length * 10; // 글자수 x 10점
+      final newScore = currentScore + wordScore;
+      final newPlayerTurns = currentPlayerTurns + 1;
+      
+      print('🏆 플레이어 단어 "$playerWord" - 글자수: ${playerWord.length}, 점수: $wordScore, 총점: $newScore, 턴: $newPlayerTurns');
+      
+      // 6. AI 응답 생성
+      final aiResponse = await AIService.generateResponse(playerWord, 1, usedWords);
       
       if (!aiResponse.success) {
-        final stageBonus = ScoreService.calculateStageClearBonus(session.currentStage);
-        final finalScore = newScore + stageBonus;
-        final nextStage = session.currentStage + 1;
-        
+        // AI가 응답하지 못함 = 플레이어 승리
         await DatabaseManager.database.rawUpdate(
-          'UPDATE game_sessions SET score = ?, current_stage = ? WHERE id = ?',
-          [finalScore, nextStage, gameId]
+          'UPDATE game_sessions SET status = ?, ended_at = ?, used_words = ?, score = ?, player_turns = ? WHERE id = ?',
+          ['player_win', DateTime.now().toIso8601String(), usedWords.join(','), newScore, newPlayerTurns, gameId]
         );
-        
-        if (nextStage > 8) {
-          final completionBonus = ScoreService.calculateGameCompletionBonus();
-          final gameCompletionScore = finalScore + completionBonus;
-          
-          await DatabaseManager.database.rawUpdate(
-            'UPDATE game_sessions SET score = ?, status = ?, ended_at = ? WHERE id = ?',
-            [gameCompletionScore, 'completed', DateTime.now().toIso8601String(), gameId]
-          );
-          
-          return {
-            'success': true,
-            'gameOver': true,
-            'victory': true,
-            'message': '🎉 모든 스테이지를 클리어했습니다!',
-            'playerWord': playerWord,
-            'aiResponse': aiResponse.toJson(),
-            'score': gameCompletionScore,
-            'stage': session.currentStage,
-            'stageCleared': true,
-            'finalStage': true
-          };
-        }
         
         return {
           'success': true,
-          'gameOver': false,
-          'victory': false,
-          'message': '🎯 스테이지 ${session.currentStage} 클리어! 다음 스테이지로 진행합니다.',
+          'gameOver': true,
+          'victory': true,
+          'message': '🎉 축하합니다! AI가 답할 수 없어서 플레이어가 승리했습니다!',
           'playerWord': playerWord,
-          'aiResponse': aiResponse.toJson(),
-          'score': finalScore,
-          'stage': nextStage,
-          'stageCleared': true,
-          'nextStageAI': AIService.getAIInfo(nextStage)
+          'finalWords': usedWords,
+          'score': newScore,
+          'playerTurns': newPlayerTurns
         };
       }
       
+      // 6. AI 단어 추가
+      usedWords.add(aiResponse.word);
+      
+      // 7. 게임 세션 업데이트
       await DatabaseManager.database.rawUpdate(
-        'UPDATE game_sessions SET score = ? WHERE id = ?',
-        [newScore, gameId]
+        'UPDATE game_sessions SET used_words = ?, score = ?, player_turns = ? WHERE id = ?',
+        [usedWords.join(','), newScore, newPlayerTurns, gameId]
       );
       
       return {
@@ -148,28 +157,26 @@ class GameController {
         'message': 'AI가 "${aiResponse.word}"(으)로 응답했습니다',
         'playerWord': playerWord,
         'aiWord': aiResponse.word,
-        'aiResponse': aiResponse.toJson(),
+        'turn': 'player',
+        'usedWords': usedWords,
         'score': newScore,
-        'stage': session.currentStage,
-        'wordScore': wordScore,
-        'scoreBreakdown': ScoreService.getScoreBreakdown(
-          word: playerWord,
-          stage: session.currentStage,
-          responseTime: responseTime,
-          consecutiveCorrect: 1,
-        )
+        'playerTurns': newPlayerTurns,
+        'lastChar': aiResponse.word[aiResponse.word.length - 1]
       };
       
     } catch (e) {
       print('❌ 단어 제출 오류: $e');
       return {
         'success': false,
-        'message': '단어 제출 처리 중 오류가 발생했습니다: $e'
+        'message': '단어 제출 처리 중 오류: $e'
       };
     }
   }
   
-  static Future<Map<String, dynamic>> getGameStatus(HttpRequest req, HttpResponse res) async {
+  static Future<Map<String, dynamic>> getGameStatus(
+    HttpRequest req, 
+    HttpResponse res
+  ) async {
     try {
       final sessionId = req.uri.pathSegments.last;
       
@@ -185,12 +192,18 @@ class GameController {
         };
       }
       
-      final session = GameSession.fromJson(result.first);
+      final sessionData = result.first;
+      final usedWordsString = sessionData['used_words'] as String? ?? '';
+      final usedWords = usedWordsString.split(',').where((w) => w.isNotEmpty).toList();
       
       return {
         'success': true,
-        'session': session.toJson(),
-        'aiInfo': AIService.getAIInfo(session.currentStage)
+        'gameId': sessionData['id'],
+        'status': sessionData['status'],
+        'usedWords': usedWords,
+        'totalTurns': usedWords.length,
+        'lastWord': usedWords.isNotEmpty ? usedWords.last : '',
+        'aiInfo': AIService.getAIInfo(1)
       };
     } catch (e) {
       return {
@@ -200,7 +213,10 @@ class GameController {
     }
   }
   
-  static Future<Map<String, dynamic>> endGame(HttpRequest req, HttpResponse res) async {
+  static Future<Map<String, dynamic>> endGame(
+    HttpRequest req, 
+    HttpResponse res
+  ) async {
     try {
       final body = await utf8.decoder.bind(req).join();
       final data = json.decode(body);
@@ -219,21 +235,15 @@ class GameController {
       );
       
       if (result.isNotEmpty) {
-        final session = GameSession.fromJson(result.first);
-        
-        if (playerName != null && playerName.isNotEmpty) {
-          await DatabaseManager.database.rawInsert(
-            'INSERT INTO rankings (player_name, score, stage_reached) VALUES (?, ?, ?)',
-            [playerName, session.score, session.currentStage]
-          );
-        }
+        final sessionData = result.first;
+        final usedWordsString = sessionData['used_words'] as String? ?? '';
+        final usedWords = usedWordsString.split(',').where((w) => w.isNotEmpty).toList();
         
         return {
           'success': true,
           'message': '게임이 종료되었습니다',
-          'finalScore': session.score,
-          'stageReached': session.currentStage,
-          'grade': ScoreService.calculateGrade(session.score)
+          'totalTurns': usedWords.length,
+          'usedWords': usedWords
         };
       }
       

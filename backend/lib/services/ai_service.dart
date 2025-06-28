@@ -5,89 +5,55 @@ import 'word_service.dart';
 class AIService {
   static final Random _random = Random();
   
-  // 단계별 AI 설정
+  // 테스트 적 설정 (무조건 대답)
   static const Map<int, Map<String, dynamic>> _stageConfig = {
-    1: {'responseRate': 0.95, 'responseTime': 2000, 'name': '테스트 적 1'},
-    2: {'responseRate': 0.90, 'responseTime': 1800, 'name': '테스트 적 2'}, 
-    3: {'responseRate': 0.85, 'responseTime': 1500, 'name': '테스트 적 3'},
-    4: {'responseRate': 0.80, 'responseTime': 1200, 'name': '테스트 적 4'},
-    5: {'responseRate': 0.75, 'responseTime': 1000, 'name': '테스트 적 5'},
-    6: {'responseRate': 0.70, 'responseTime': 800, 'name': '테스트 적 6'},
-    7: {'responseRate': 0.65, 'responseTime': 600, 'name': '테스트 적 7'},
-    8: {'responseRate': 0.60, 'responseTime': 400, 'name': '테스트 적 8'},
+    1: {'responseRate': 1.0, 'responseTime': 2000, 'name': '테스트 적'},
   };
   
-  // AI 응답 생성
-  static Future<AIResponse> generateResponse(String lastWord, int stage) async {
-    print('🤖 AI가 응답을 생성 중... (Stage: $stage, 마지막 단어: $lastWord)');
+  // AI 응답 생성 (테스트 적 - 무조건 대답)
+  static Future<AIResponse> generateResponse(String lastWord, int stage, List<String> usedWords) async {
+    print('🤖 테스트 적이 응답을 생성 중... (마지막 단어: $lastWord)');
     
-    // 단계 설정 가져오기
-    final config = _stageConfig[stage] ?? _stageConfig[1]!;
-    final responseRate = config['responseRate'] as double;
-    final maxResponseTime = config['responseTime'] as int;
+    // 즉시 응답 (프론트엔드에서 지연 관리)
+    print('⚡ AI 즉시 응답 모드');
     
-    // 응답 시간 시뮬레이션 (실제로는 즉시 처리)
-    final responseTime = _random.nextInt(maxResponseTime ~/ 2) + maxResponseTime ~/ 2;
-    await Future.delayed(Duration(milliseconds: responseTime));
-    
-    // 응답 확률 체크
-    final willRespond = _random.nextDouble() < responseRate;
-    
-    if (!willRespond) {
-      // AI가 응답하지 못함 (플레이어 승리)
-      return AIResponse(
-        word: '',
-        responseTime: responseTime,
-        success: false,
-        reason: 'AI가 단어를 찾지 못했습니다'
-      );
-    }
-    
-    // 마지막 단어의 끝글자로 시작하는 단어 찾기
+    // 마지막 단어의 끝글자로 시작하는 단어 찾기 (두음법칙 포함)
     final lastChar = lastWord.isNotEmpty ? lastWord[lastWord.length - 1] : '';
-    final candidateWords = await WordService.searchWordsByFirstChar(lastChar, limit: 20);
+    final possibleFirstChars = WordService.getPossibleFirstChars(lastChar);
+    print('🔤 "$lastChar" → 가능한 시작 글자: ${possibleFirstChars.join(", ")}');
     
-    if (candidateWords.isEmpty) {
+    final candidateWords = await WordService.searchWordsByFirstChar(lastChar, limit: 100);
+    
+    print('📝 $lastChar(으)로 시작하는 단어 ${candidateWords.length}개 발견 (두음법칙 포함)');
+    
+    // 사용하지 않은 단어만 필터링
+    final availableWords = candidateWords.where((word) => !usedWords.contains(word.word)).toList();
+    
+    print('🔍 사용 가능한 단어: ${availableWords.length}개');
+    
+    if (availableWords.isEmpty) {
+      print('❌ AI가 사용할 수 있는 단어가 없습니다');
       return AIResponse(
         word: '',
-        responseTime: responseTime,
+        responseTime: 100, // 즉시
         success: false,
-        reason: '사용 가능한 단어가 없습니다'
+        reason: 'AI가 사용할 수 있는 단어가 없습니다'
       );
     }
     
-    // 난이도에 따른 단어 선택
-    final selectedWord = _selectWordByDifficulty(candidateWords, stage);
+    // 랜덤으로 단어 선택
+    final selectedWord = availableWords[_random.nextInt(availableWords.length)];
     
     // 선택된 단어의 사용 빈도 증가
     await WordService.increaseWordFrequency(selectedWord.word);
     
+    print('✅ AI가 선택한 단어: ${selectedWord.word}');
+    
     return AIResponse(
       word: selectedWord.word,
-      responseTime: responseTime,
+      responseTime: 100, // 즉시 응답
       success: true,
     );
-  }
-  
-  // 난이도에 따른 단어 선택 로직
-  static Word _selectWordByDifficulty(List<Word> words, int stage) {
-    if (words.isEmpty) throw Exception('선택할 단어가 없습니다');
-    
-    // 낮은 단계: 빈도가 높은(쉬운) 단어 선택
-    // 높은 단계: 빈도가 낮은(어려운) 단어도 선택
-    
-    if (stage <= 2) {
-      // 1-2단계: 상위 50% 단어에서만 선택
-      final easyWords = words.take((words.length * 0.5).ceil()).toList();
-      return easyWords[_random.nextInt(easyWords.length)];
-    } else if (stage <= 4) {
-      // 3-4단계: 상위 75% 단어에서 선택
-      final mediumWords = words.take((words.length * 0.75).ceil()).toList();
-      return mediumWords[_random.nextInt(mediumWords.length)];
-    } else {
-      // 5단계 이상: 모든 단어에서 선택 (어려운 단어 포함)
-      return words[_random.nextInt(words.length)];
-    }
   }
   
   // 게임 시작용 랜덤 단어 생성
@@ -95,6 +61,7 @@ class AIService {
     try {
       final randomWord = await WordService.getRandomWord();
       if (randomWord != null) {
+        print('🎯 게임 시작 단어: ${randomWord.word}');
         return randomWord.word;
       }
     } catch (e) {
@@ -103,17 +70,19 @@ class AIService {
     
     // 기본 시작 단어들 중 랜덤 선택
     final defaultWords = ['사과', '학교', '컴퓨터', '음악', '책상', '나무', '바다', '구름'];
-    return defaultWords[_random.nextInt(defaultWords.length)];
+    final selectedWord = defaultWords[_random.nextInt(defaultWords.length)];
+    print('🎯 기본 시작 단어: $selectedWord');
+    return selectedWord;
   }
   
   // AI 정보 가져오기
   static Map<String, dynamic> getAIInfo(int stage) {
-    final config = _stageConfig[stage] ?? _stageConfig[1]!;
     return {
-      'stage': stage,
-      'name': config['name'],
-      'responseRate': '${((config['responseRate'] as double) * 100).toInt()}%',
-      'responseTime': '${config['responseTime']}ms 이하',
+      'stage': 1,
+      'name': '테스트 적',
+      'responseRate': '100%',
+      'responseTime': '1-7초 (랜덤)',
+      'description': '답할 수 있는 단어가 있으면 무조건 대답하는 테스트용 적입니다. 자연스러운 응답 시간을 위해 랜덤한 지연을 가집니다.'
     };
   }
 }

@@ -31,6 +31,9 @@ dependencies:
   
   # 유틸리티
   flutter_screenutil: ^5.8.4
+  
+  # 사운드 재생
+  audioplayers: ^5.0.0
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +50,7 @@ flutter:
     - assets/images/ui/
     - assets/fonts/
     - assets/data/
+    - assets/sounds/
   
   # fonts:
   #   - family: GameFont

@@ -22,14 +22,26 @@ class DatabaseManager {
       
       _database = await openDatabase(
         dbPath,
-        version: 1,
+        version: 3, // 버전 업데이트
         onCreate: (db, version) async {
           await _createTables(db);
         },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            // used_words 컬럼 추가
+            await db.execute('ALTER TABLE game_sessions ADD COLUMN used_words TEXT DEFAULT ""');
+            print('✅ 데이터베이스 스키마 업데이트 완료');
+          }
+          if (oldVersion < 3) {
+            // player_turns 컬럼 추가
+            await db.execute('ALTER TABLE game_sessions ADD COLUMN player_turns INTEGER DEFAULT 0');
+            print('✅ player_turns 컬럼 추가 완료');
+          }
+        },
       );
       
-      // 한국어 단어 파일에서 로드 (강제 새로고침)
-      await _loadKoreanWordsFromFile(forceReload: true);
+      // 한국어 단어 파일에서 로드
+      await _loadKoreanWordsFromFile();
       
       print('✅ SQLite 데이터베이스 초기화 완료: $dbPath');
     } catch (e) {
@@ -56,7 +68,9 @@ class DatabaseManager {
         player_name TEXT,
         current_stage INTEGER DEFAULT 1,
         score INTEGER DEFAULT 0,
+        player_turns INTEGER DEFAULT 0,
         status TEXT DEFAULT 'active',
+        used_words TEXT DEFAULT '',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         ended_at TEXT
       )
@@ -75,8 +89,17 @@ class DatabaseManager {
     print('✅ 모든 테이블 생성 완료');
   }
   
-  static Future<void> _loadKoreanWordsFromFile({bool forceReload = false}) async {
+  static Future<void> _loadKoreanWordsFromFile() async {
     try {
+      // 기존 단어가 있는지 확인
+      final result = await database.rawQuery('SELECT COUNT(*) as count FROM words');
+      final count = result.first['count'] as int;
+      
+      if (count > 0) {
+        print('✅ 단어 데이터가 이미 존재합니다 ($count개)');
+        return;
+      }
+      
       // txt 파일 경로
       final filePath = path.join(Directory.current.path, 'assets', 'korean_words.txt');
       final file = File(filePath);
@@ -84,32 +107,8 @@ class DatabaseManager {
       if (!await file.exists()) {
         print('⚠️ korean_words.txt 파일을 찾을 수 없습니다: $filePath');
         print('📂 backend/assets/ 폴더에 korean_words.txt 파일을 추가해주세요');
-        
-        // 기존 단어가 있는지 확인
-        final result = await database.rawQuery('SELECT COUNT(*) as count FROM words');
-        final count = result.first['count'] as int;
-        
-        if (count == 0) {
-          await _insertDefaultWords();
-        } else {
-          print('✅ 기존 단어 데이터 사용 ($count개)');
-        }
+        await _insertDefaultWords();
         return;
-      }
-      
-      // 기존 단어가 있는지 확인
-      final result = await database.rawQuery('SELECT COUNT(*) as count FROM words');
-      final count = result.first['count'] as int;
-      
-      if (count > 0 && !forceReload) {
-        print('✅ 단어 데이터가 이미 존재합니다 ($count개)');
-        print('💡 새로운 단어 파일로 교체하려면 word_chain_game.db 파일을 삭제하고 다시 시작하세요');
-        return;
-      }
-      
-      if (forceReload && count > 0) {
-        print('🔄 기존 단어 데이터를 삭제하고 새로 로드합니다...');
-        await database.delete('words');
       }
       
       print('📖 한국어 단어 파일 로딩 중...');
