@@ -47,11 +47,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _playerTurns = 0;
   int _score = 0;
   int _currentSlot = 0;
+  int _currentStage = 1;
+  bool _stageClearInProgress = false;
   
   // AI 응답 관리
   String? _pendingAIWord; // AI 응답 대기 중인 단어
   bool _aiResponseReady = false; // AI 응답 준비 완료
   int _aiThinkingDuration = 0; // AI 생각 시간 (밀리초)
+  bool _aiCannotRespond = false; // AI가 응답할 수 없는 상태
   
   // 타이핑 애니메이션 관리
   String _typingWord = ''; // 현재 타이핑 중인 단어
@@ -227,28 +230,104 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   // AI 턴 완료 처리
   void _handleAITurnComplete() async {
-    // AI 죽는 애니메이션 시작
-    setState(() {
-      _enemyState = CharacterState.death;
-      _isShowingDeathAnimation = true;
-      _currentMessage = 'AI 시간 초과...';
-    });
+    print('🔔 AI 타이머 완료 - 확률 실패: $_aiCannotRespond'); // 디버깅
     
-    // 2초 후 승리 화면 표시
-    _deathAnimationTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _gameOver = true;
-          _victory = true; // 플레이어 승리
-          _currentMessage = '🎉 AI가 시간 내에 답하지 못했습니다! 승리!';
-          _isShowingDeathAnimation = false;
-        });
+    // 확률 실패로 AI가 응답할 수 없는 경우만 처리
+    if (_aiCannotRespond) {
+      print('🔔 AI 타이머에서 단계 클리어 처리 시도 - 현재 단계: $_currentStage');
+      
+      // 중요: 백엔드에서 이미 단계 클리어 처리가 되었을 수 있음
+      // 중복 처리를 방지하기 위해 백엔드로 확인 요청
+      if (_gameId != null) {
+        final gameStatus = await ApiService.getGameStatus(_gameId!);
+        if (gameStatus != null && gameStatus['success'] == true) {
+          final backendStage = gameStatus['currentStage'] as int? ?? _currentStage;
+          print('📊 백엔드 단계 확인: $backendStage vs 프론트엔드: $_currentStage');
+          
+          if (backendStage > _currentStage) {
+            // 백엔드에서 이미 단계 업데이트가 되었음
+            print('🚫 백엔드에서 이미 단계 클리어 처리됨. 중복 처리 방지.');
+            setState(() {
+              _currentStage = backendStage;
+              _playerTurn = true;
+              _isWaitingForAI = false;
+              _aiCannotRespond = false;
+              _currentMessage = '${backendStage}단계 시작!';
+            });
+            return; // 중복 처리 방지
+          }
+        }
       }
-    });
-    
-    if (_gameId != null) {
-      await ApiService.endGame(gameId: _gameId!);
+      
+      // 백엔드에서 아직 처리되지 않은 경우에만 진행
+      if (_currentStage < 3) {
+        print('🎉 프론트엔드에서 단계 클리어 처리 진행');
+        
+        // 단계 클리어 처리
+        final nextStage = _currentStage + 1;
+        
+        setState(() {
+          _enemyState = CharacterState.death;
+          _isShowingDeathAnimation = true;
+          _stageClearInProgress = true;
+          _currentMessage = '🎉 ${_currentStage}단계 클리어!';
+        });
+        
+        // 3초 후 다음 단계 적 등장
+        _deathAnimationTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _currentStage = nextStage;
+              _enemyState = CharacterState.idle; // 새 적 등장
+              _isShowingDeathAnimation = false;
+              _stageClearInProgress = false;
+              _playerTurn = true;
+              _isWaitingForAI = false;
+              _aiCannotRespond = false;
+              _currentMessage = '${nextStage}단계 시작!';
+              
+              // 레벨 표시 애니메이션
+              _showLevelIndicator(nextStage);
+            });
+            
+            // 타이머 재시작
+            _timerController.reset();
+            _timerController.forward();
+            
+            // 포커스 요청
+            _requestFocusIfPlayerTurn();
+          }
+        });
+        
+        // 게임은 계속 진행되므로 endGame 호출하지 않음!
+        // 백엔드에서 이미 단계 업데이트가 완료되었음
+      } else {
+        // 모든 단계 클리어 - 게임 승리
+        setState(() {
+          _enemyState = CharacterState.death;
+          _isShowingDeathAnimation = true;
+          _currentMessage = '🏆 모든 단계 클리어!';
+        });
+        
+        // 2초 후 승리 화면 표시
+        _deathAnimationTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _gameOver = true;
+              _victory = true;
+              _currentMessage = '🏆 축하합니다! 모든 단계를 클리어했습니다!';
+              _isShowingDeathAnimation = false;
+            });
+          }
+        });
+        
+        // 모든 단계 클리어 시에만 게임 종료
+        if (_gameId != null) {
+          await ApiService.endGame(gameId: _gameId!);
+        }
+      }
     }
+    // 정상적인 AI 응답은 _processAIResponse에서 처리
   }
   
   // 서버 연결 상태 확인
@@ -653,31 +732,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       CharacterImage(
                         type: CharacterType.enemy,
                         state: _enemyState,
+                        stage: _currentStage, // 단계 전달
                         width: size.width * 0.25,
                         height: size.height * 0.4,
                         isActive: !_playerTurn && _isWaitingForAI,
                       ),
                       
-                      // AI 생각 중 애니메이션 (외곽선)
-                      if (_isWaitingForAI && !_isTyping)
-                        Positioned.fill(
-                          child: AnimatedBuilder(
-                            animation: _aiThinkingController,
-                            builder: (context, child) {
-                              return Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFF50E3C2).withOpacity(
-                                      0.3 + 0.7 * _aiThinkingController.value
-                                    ),
-                                    width: 3,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                      // AI 생각 중 애니메이션 제거 (CharacterImage의 isActive로 처리)
                     ],
                   ),
                 ),
@@ -693,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Text(
-                  _isWaitingForAI ? 'THINKING...' : 'AI',
+                  _isWaitingForAI ? 'THINKING...' : _getEnemyName(),
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: size.width < 600 ? 12 : 14,
@@ -740,31 +801,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ).animate().fadeIn(delay: 500.ms, duration: 800.ms).slideY(begin: -0.5),
         ),
         
-        // 점수 표시 (중앙 상단)
+        // 점수 및 단계 표시 (중앙 상단)
         Positioned(
           top: size.height * 0.12,
           left: size.width * 0.35,
           right: size.width * 0.35,
           child: Center(
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: size.width < 600 ? 15 : 20, 
-                vertical: size.width < 600 ? 8 : 10
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16213E),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24, width: 2),
-              ),
-              child: Text(
-                'SCORE: $_score',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: size.width < 600 ? 14 : 18,
-                  fontWeight: FontWeight.bold,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: size.width < 600 ? 12 : 15, 
+                    vertical: size.width < 600 ? 8 : 10
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6B6B).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFF6B6B), width: 2),
+                  ),
+                  child: Text(
+                    'LV.$_currentStage',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xFFFF6B6B),
+                      fontSize: size.width < 600 ? 14 : 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: size.width < 600 ? 15 : 20, 
+                    vertical: size.width < 600 ? 8 : 10
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16213E),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24, width: 2),
+                  ),
+                  child: Text(
+                    'SCORE: $_score',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: size.width < 600 ? 14 : 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ).animate().fadeIn(delay: 700.ms, duration: 800.ms).slideY(begin: -0.5),
         ),
@@ -886,7 +973,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           bottom: size.height * 0.05,
           left: size.width * 0.35,
           right: size.width * 0.35,
-          child: Container(
+          child: AnimatedOpacity(
+            opacity: _stageClearInProgress ? 0.5 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: size.width < 600 ? 15 : 20, 
               vertical: size.width < 600 ? 12 : 15
@@ -910,8 +1000,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: TextField(
               controller: _wordController,
               focusNode: _wordFocusNode,
-              enabled: _playerTurn && !_isWaitingForAI,
-              autofocus: _playerTurn && !_isWaitingForAI, // 상태에 따라 autofocus
+              enabled: _playerTurn && !_isWaitingForAI && !_stageClearInProgress,
+              autofocus: _playerTurn && !_isWaitingForAI && !_stageClearInProgress, // 상태에 따라 autofocus
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _playerTurn && !_isWaitingForAI ? Colors.white : Colors.white54, 
@@ -935,11 +1025,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       : Colors.grey,
                     size: size.width < 600 ? 20 : 24,
                   ),
-                  onPressed: _playerTurn && !_isWaitingForAI ? _submitWord : null,
+                  onPressed: _playerTurn && !_isWaitingForAI && !_stageClearInProgress ? _submitWord : null,
                 ),
               ),
-              onSubmitted: _playerTurn && !_isWaitingForAI ? (_) => _submitWord() : null,
+              onSubmitted: _playerTurn && !_isWaitingForAI && !_stageClearInProgress ? (_) => _submitWord() : null,
             ),
+          ),
           ),
         ),
       ],
@@ -1022,9 +1113,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _currentSlot = 0;
       _playerTurns = 0;
       _score = 0;
+      _currentStage = 1;
+      
+      // Provider 단계 상태도 초기화
+      Provider.of<GameProvider>(context, listen: false).updateStage(1);
+      _stageClearInProgress = false;
+      _aiCannotRespond = false;
     });
     
-    Provider.of<GameProvider>(context, listen: false).startGame();
+    Provider.of<GameProvider>(context, listen: false).startGame(resetStage: true);
     
     try {
       final response = await ApiService.startGame();
@@ -1109,7 +1206,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   // 단어 제출
   Future<void> _submitWord() async {
-    if (!_playerTurn || _isWaitingForAI || _gameId == null || _isTyping) return;
+    if (!_playerTurn || _isWaitingForAI || _gameId == null || _isTyping || _stageClearInProgress) return;
     
     final word = _wordController.text.trim();
     if (word.isEmpty) return;
@@ -1134,11 +1231,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   // AI 응답 스케줄링 (지정된 시간 후 응답)
   Future<void> _scheduleAIResponse() async {
+    // AI가 확률로 인해 응답할 수 없는 경우 처리하지 않음
+    if (_aiCannotRespond) {
+      print('🚫 AI가 확률 실패로 응답할 수 없으므로 대기');
+      return;
+    }
+    
     // 지정된 시간만큼 대기
     await Future.delayed(Duration(milliseconds: _aiThinkingDuration));
     
     // 게임이 아직 진행 중이고 AI 턴인 경우에만 실행
-    if (!mounted || _gameOver || _playerTurn) return;
+    if (!mounted || _gameOver || _playerTurn || _aiCannotRespond) return;
     
     // AI 응답이 준비된 경우 즉시 처리
     if (_aiResponseReady && _pendingAIWord != null) {
@@ -1150,7 +1253,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     for (int i = 0; i < 10; i++) {
       await Future.delayed(const Duration(milliseconds: 100));
       
-      if (!mounted || _gameOver || _playerTurn) return;
+      if (!mounted || _gameOver || _playerTurn || _aiCannotRespond) return;
       
       if (_aiResponseReady && _pendingAIWord != null) {
         _processAIResponse();
@@ -1159,7 +1262,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
     
     // 여전히 응답이 없는 경우 메시지 업데이트
-    if (mounted && !_gameOver && !_playerTurn) {
+    if (mounted && !_gameOver && !_playerTurn && !_aiCannotRespond) {
       setState(() {
         _currentMessage = 'AI가 단어를 찾는 중...';
       });
@@ -1205,6 +1308,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   // API에 단어 제출 (성공 시에만 타이핑 애니메이션)
   Future<void> _submitWordToAPI(String word) async {
+    print('📤 API 전송 준비: gameId=$_gameId, word=$word'); // 디버깅
+    
     try {
       final response = await ApiService.submitWord(
         gameId: _gameId!,
@@ -1216,7 +1321,69 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // 성공! 플레이어 타이핑 애니메이션 시작
         await _startTypingAnimation(word, true);
         
-        if (response['gameOver'] == true) {
+        // 단계 클리어 처리
+        if (response['stageClear'] == true) {
+          print('🎉 단계 클리어 감지! gameId: $_gameId'); // 디버깅
+          
+          // 단계 클리어!
+          final nextStage = response['nextStage'] ?? (_currentStage + 1);
+          
+          setState(() {
+            _enemyState = CharacterState.death; // 현재 적 죽음
+            _isShowingDeathAnimation = true;
+            _stageClearInProgress = true;
+            _currentMessage = response['message'] ?? '🎉 ${_currentStage}단계 클리어!';
+            _usedWords = List<String>.from(response['usedWords'] ?? []);
+            _playerTurns = response['playerTurns'] ?? _playerTurns;
+            _score = response['score'] ?? _score;
+            
+            // 단어 슬롯에 플레이어 단어 추가
+            _displayWords[_currentSlot] = word;
+          });
+          
+          // 3초 후 다음 단계 적 등장
+          _deathAnimationTimer = Timer(const Duration(seconds: 3), () {
+            print('🕐 3초 타이머 완료 - gameId: $_gameId'); // 디버깅
+            
+            if (mounted) {
+              setState(() {
+                print('🎮 단계 전환: $_currentStage -> $nextStage (gameId: $_gameId)'); // 디버깅
+                
+                _currentStage = nextStage;
+                _enemyState = CharacterState.idle; // 새 적 등장
+                
+                // Provider 단계 상태도 업데이트
+                Provider.of<GameProvider>(context, listen: false).updateStage(nextStage);
+                _isShowingDeathAnimation = false;
+                _stageClearInProgress = false;
+                _playerTurn = true;
+                _isWaitingForAI = false;
+                _currentMessage = '${nextStage}단계 시작!';
+                
+                // AI 턴 카운트 리셋
+                _aiCannotRespond = false;
+                
+                // 🔧 수정: 마지막 사용된 단어의 마지막 글자를 시작 글자로 설정
+                if (_usedWords.isNotEmpty) {
+                  final lastUsedWord = _usedWords.last;
+                  _lastChar = lastUsedWord[lastUsedWord.length - 1];
+                  print('🎯 새 단계 시작 글자: $_lastChar (마지막 단어: $lastUsedWord)');
+                }
+                
+                // 레벨 표시 애니메이션
+                _showLevelIndicator(nextStage);
+              });
+              
+              // 타이머 재시작
+              _timerController.reset();
+              _timerController.forward();
+              
+              // 포커스 요청
+              _requestFocusIfPlayerTurn();
+            }
+          });
+          
+        } else if (response['gameOver'] == true) {
           // 게임 종룄 - 승리/패배에 따른 죽는 애니메이션
           final victory = response['victory'] ?? false;
           
@@ -1250,6 +1417,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _playerTurn = false;
             _isWaitingForAI = true;
             _currentMessage = 'AI가 생각하는 중...';
+            _aiCannotRespond = false; // 초기화
             
             // 플레이어 단어를 슬롯에 추가
             _displayWords[_currentSlot] = word;
@@ -1259,12 +1427,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _playerTurns = response['playerTurns'] ?? _playerTurns;
             _score = response['score'] ?? _score;
             
+            // 단계 업데이트 전후 비교
+            final oldStage = _currentStage;
+            final backendStage = response['currentStage'] ?? _currentStage;
+            _currentStage = backendStage;
+            
+            // Provider 단계 상태도 동기화
+            if (oldStage != _currentStage) {
+              Provider.of<GameProvider>(context, listen: false).updateStage(_currentStage);
+            }
+            
+            print('📊 단계 상태: $oldStage -> $_currentStage (백엔드: $backendStage)');
+            
             // AI 응답 준비
             final aiWord = response['aiWord'];
             if (aiWord != null && aiWord.isNotEmpty) {
               _pendingAIWord = aiWord;
               _aiResponseReady = true;
               print('✅ AI 응답 준비 완료: $aiWord');
+            } else if (response['aiFailReason'] == 'probability_fail') {
+              // 확률 실패로 AI가 응답할 수 없음
+              _aiCannotRespond = true;
+              _pendingAIWord = null;
+              _aiResponseReady = false;
+              
+              // 중요: AI 타이머 중지 (중복 처리 방지)
+              _aiTimerController.stop();
+              
+              print('🎲 AI가 확률로 인해 응답할 수 없습니다 (단계: $_currentStage)');
+              print('⏹️ AI 타이머 중지 - 중복 처리 방지');
             }
           });
           
@@ -1336,6 +1527,102 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     });
   }
+  
+  // 레벨 표시 애니메이션
+  void _showLevelIndicator(int level) {
+    showGeneralDialog(
+      context: context,
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16213E),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF50E3C2), width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF50E3C2).withOpacity(0.5),
+                  blurRadius: 30,
+                  spreadRadius: 10,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'LEVEL $level',
+                  style: const TextStyle(
+                    color: Color(0xFF50E3C2),
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _getStageName(level),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ).animate()
+          .scale(duration: 500.ms, curve: Curves.elasticOut)
+          .fadeIn(duration: 300.ms);
+      },
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+    );
+    
+    // 2초 후 자동으로 닫기
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
+  
+  // 단계 이름 가져오기
+  String _getStageName(int stage) {
+    switch (stage) {
+      case 1:
+        return '초급 전사';
+      case 2:
+        return '중급 마법사';
+      case 3:
+        return '전설의 드래곤';
+      default:
+        return '';
+    }
+  }
+  
+  // 적 이름 가져오기 (짧은 버전)
+  String _getEnemyName() {
+    switch (_currentStage) {
+      case 1:
+        return '전사';
+      case 2:
+        return '마법사';
+      case 3:
+        return '드래곤';
+      default:
+        return 'AI';
+    }
+  }
+  
+
   
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1939,6 +2226,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _playerTurns = 0;
       _score = 0;
       _currentSlot = 0;
+      _currentStage = 1;
+      _stageClearInProgress = false;
       _isWaitingForAI = false;
       _rankingSubmitted = false;
       
@@ -1946,6 +2235,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _pendingAIWord = null;
       _aiResponseReady = false;
       _aiThinkingDuration = 0;
+      _aiCannotRespond = false;
       
       // 캐릭터 상태 초기화
       _playerState = CharacterState.idle;

@@ -1,5 +1,4 @@
 import 'package:alfred/alfred.dart';
-import 'dart:io';
 import 'database/database.dart';
 import 'controllers/game_controller.dart';
 import 'controllers/ranking_controller.dart';

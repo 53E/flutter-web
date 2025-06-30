@@ -58,6 +58,25 @@
       ]
     },
     {
+      "name": "audioplayers",
+      "version": "5.2.1",
+      "dependencies": [
+        "audioplayers_android",
+        "audioplayers_darwin",
+        "audioplayers_linux",
+        "audioplayers_platform_interface",
+        "audioplayers_web",
+        "audioplayers_windows",
+        "file",
+        "flutter",
+        "http",
+        "meta",
+        "path_provider",
+        "synchronized",
+        "uuid"
+      ]
+    },
+    {
       "name": "flutter_screenutil",
       "version": "5.9.3",
       "dependencies": [
@@ -303,11 +322,19 @@
       ]
     },
     {
-      "name": "crypto",
-      "version": "3.0.6",
+      "name": "uuid",
+      "version": "4.5.1",
       "dependencies": [
-        "typed_data"
+        "crypto",
+        "fixnum",
+        "meta",
+        "sprintf"
       ]
+    },
+    {
+      "name": "synchronized",
+      "version": "3.4.0",
+      "dependencies": []
     },
     {
       "name": "path_provider",
@@ -329,6 +356,72 @@
         "http_parser",
         "meta",
         "web"
+      ]
+    },
+    {
+      "name": "file",
+      "version": "7.0.1",
+      "dependencies": [
+        "meta",
+        "path"
+      ]
+    },
+    {
+      "name": "audioplayers_windows",
+      "version": "3.1.0",
+      "dependencies": [
+        "audioplayers_platform_interface",
+        "flutter"
+      ]
+    },
+    {
+      "name": "audioplayers_web",
+      "version": "4.1.0",
+      "dependencies": [
+        "audioplayers_platform_interface",
+        "flutter",
+        "flutter_web_plugins",
+        "js"
+      ]
+    },
+    {
+      "name": "audioplayers_platform_interface",
+      "version": "6.1.0",
+      "dependencies": [
+        "flutter",
+        "meta",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "audioplayers_linux",
+      "version": "3.1.0",
+      "dependencies": [
+        "audioplayers_platform_interface",
+        "flutter"
+      ]
+    },
+    {
+      "name": "audioplayers_darwin",
+      "version": "5.0.2",
+      "dependencies": [
+        "audioplayers_platform_interface",
+        "flutter"
+      ]
+    },
+    {
+      "name": "audioplayers_android",
+      "version": "4.0.3",
+      "dependencies": [
+        "audioplayers_platform_interface",
+        "flutter"
+      ]
+    },
+    {
+      "name": "crypto",
+      "version": "3.0.6",
+      "dependencies": [
+        "typed_data"
       ]
     },
     {
@@ -447,11 +540,14 @@
       "dependencies": []
     },
     {
-      "name": "typed_data",
-      "version": "1.4.0",
-      "dependencies": [
-        "collection"
-      ]
+      "name": "fixnum",
+      "version": "1.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "sprintf",
+      "version": "7.0.0",
+      "dependencies": []
     },
     {
       "name": "path_provider_windows",
@@ -505,11 +601,10 @@
       "dependencies": []
     },
     {
-      "name": "file",
-      "version": "7.0.1",
+      "name": "js",
+      "version": "0.6.7",
       "dependencies": [
-        "meta",
-        "path"
+        "meta"
       ]
     },
     {
@@ -517,6 +612,13 @@
       "version": "2.1.8",
       "dependencies": [
         "meta"
+      ]
+    },
+    {
+      "name": "typed_data",
+      "version": "1.4.0",
+      "dependencies": [
+        "collection"
       ]
     },
     {
@@ -536,108 +638,6 @@
         "meta",
         "path"
       ]
-    },
-    {
-      "name": "audioplayers",
-      "version": "5.2.1",
-      "dependencies": [
-        "audioplayers_android",
-        "audioplayers_darwin",
-        "audioplayers_linux",
-        "audioplayers_platform_interface",
-        "audioplayers_web",
-        "audioplayers_windows",
-        "file",
-        "flutter",
-        "http",
-        "meta",
-        "path_provider",
-        "synchronized",
-        "uuid"
-      ]
-    },
-    {
-      "name": "audioplayers_windows",
-      "version": "3.1.0",
-      "dependencies": [
-        "audioplayers_platform_interface",
-        "flutter"
-      ]
-    },
-    {
-      "name": "audioplayers_web",
-      "version": "4.1.0",
-      "dependencies": [
-        "audioplayers_platform_interface",
-        "flutter",
-        "flutter_web_plugins",
-        "js"
-      ]
-    },
-    {
-      "name": "audioplayers_platform_interface",
-      "version": "6.1.0",
-      "dependencies": [
-        "flutter",
-        "meta",
-        "plugin_platform_interface"
-      ]
-    },
-    {
-      "name": "audioplayers_linux",
-      "version": "3.1.0",
-      "dependencies": [
-        "audioplayers_platform_interface",
-        "flutter"
-      ]
-    },
-    {
-      "name": "audioplayers_darwin",
-      "version": "5.0.2",
-      "dependencies": [
-        "audioplayers_platform_interface",
-        "flutter"
-      ]
-    },
-    {
-      "name": "audioplayers_android",
-      "version": "4.0.3",
-      "dependencies": [
-        "audioplayers_platform_interface",
-        "flutter"
-      ]
-    },
-    {
-      "name": "js",
-      "version": "0.6.7",
-      "dependencies": [
-        "meta"
-      ]
-    },
-    {
-      "name": "synchronized",
-      "version": "3.4.0",
-      "dependencies": []
-    },
-    {
-      "name": "uuid",
-      "version": "4.5.1",
-      "dependencies": [
-        "crypto",
-        "fixnum",
-        "meta",
-        "sprintf"
-      ]
-    },
-    {
-      "name": "sprintf",
-      "version": "7.0.0",
-      "dependencies": []
-    },
-    {
-      "name": "fixnum",
-      "version": "1.1.1",
-      "dependencies": []
     }
   ],
   "configVersion": 1

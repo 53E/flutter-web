@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 enum CharacterState {
   idle,    // 기본 대기 상태
@@ -18,6 +17,7 @@ class CharacterImage extends StatefulWidget {
   final double? width;
   final double? height;
   final bool isActive; // 현재 턴인지 여부
+  final int? stage; // 적의 단계 (1, 2, 3)
 
   const CharacterImage({
     super.key,
@@ -26,6 +26,7 @@ class CharacterImage extends StatefulWidget {
     this.width,
     this.height,
     this.isActive = false,
+    this.stage,
   });
 
   @override
@@ -111,9 +112,15 @@ class _CharacterImageState extends State<CharacterImage>
   }
 
   String _getImagePath() {
-    final String characterType = widget.type == CharacterType.player ? 'player' : 'enemy';
     final String stateName = widget.state.name; // idle, attack, death
-    return 'assets/images/characters/$characterType/$stateName.png';
+    
+    if (widget.type == CharacterType.player) {
+      return 'assets/images/characters/player/$stateName.png';
+    } else {
+      // 적의 경우 단계별 이미지 사용
+      final int currentStage = widget.stage ?? 1;
+      return 'assets/images/characters/enemy/stage$currentStage/$stateName.png';
+    }
   }
 
   Widget _buildFallbackIcon() {

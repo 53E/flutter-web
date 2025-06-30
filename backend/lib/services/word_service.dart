@@ -21,8 +21,10 @@ class WordService {
     '률': ['률', '율'],
     '리': ['리', '이'],
     '린': ['린', '인'],
-    '림': ['림', '임'],
+    '림': ['림', '임'], // "그림" → "림" 또는 "임"
     '립': ['립', '입'],
+    '름': ['름', '음'], // "이름" → "름" 또는 "음"
+    '력': ['력', '역'], // "능력" → "력" 또는 "역"
     '라': ['라', '나'],
     '락': ['락', '낙'],
     '란': ['란', '난'],
@@ -54,8 +56,10 @@ class WordService {
     '율': ['률', '율'],
     '이': ['리', '이', '니'],
     '인': ['린', '인'],
-    '임': ['림', '임'],
+    '임': ['림', '임'], // "임" → "림" 또는 "임" (역방향)
     '입': ['립', '입'],
+    '음': ['름', '음'], // "음" → "름" 또는 "음" (역방향)
+    '역': ['력', '역'], // "역" → "력" 또는 "역" (역방향)
     '나': ['라', '나'],
     '낙': ['락', '낙'],
     '난': ['란', '난'],
@@ -94,15 +98,9 @@ class WordService {
       return true;
     }
     
-    // 2. 두음법칙 적용 검증
-    return _isValidByDoubleConsonantRule(previousLastChar, currentFirstChar);
-  }
-  
-  // 두음법칙 검증
-  static bool _isValidByDoubleConsonantRule(String lastChar, String firstChar) {
-    // 마지막 글자에 대한 두음법칙 변형들을 확인
-    final possibleFirstChars = _doubleConsonantRules[lastChar];
-    if (possibleFirstChars != null && possibleFirstChars.contains(firstChar)) {
+    // 2. 두음법칙 적용 검증 - "름" → "음", "림" → "임" 등
+    final possibleFirstChars = _doubleConsonantRules[previousLastChar];
+    if (possibleFirstChars != null && possibleFirstChars.contains(currentFirstChar)) {
       return true;
     }
     

@@ -22,7 +22,7 @@ class DatabaseManager {
       
       _database = await openDatabase(
         dbPath,
-        version: 3, // 버전 업데이트
+        version: 4, // 버전 업데이트
         onCreate: (db, version) async {
           await _createTables(db);
         },
@@ -36,6 +36,11 @@ class DatabaseManager {
             // player_turns 컬럼 추가
             await db.execute('ALTER TABLE game_sessions ADD COLUMN player_turns INTEGER DEFAULT 0');
             print('✅ player_turns 컬럼 추가 완료');
+          }
+          if (oldVersion < 4) {
+            // ai_turn_count 컬럼 추가
+            await db.execute('ALTER TABLE game_sessions ADD COLUMN ai_turn_count INTEGER DEFAULT 0');
+            print('✅ ai_turn_count 컬럼 추가 완료');
           }
         },
       );
@@ -71,6 +76,7 @@ class DatabaseManager {
         player_turns INTEGER DEFAULT 0,
         status TEXT DEFAULT 'active',
         used_words TEXT DEFAULT '',
+        ai_turn_count INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         ended_at TEXT
       )
