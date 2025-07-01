@@ -11,19 +11,19 @@ class AIService {
       'baseResponseRate': 1.0,
       'declineRate': 0.07, // 7% 하락
       'responseTime': 2000,
-      'name': '초급 전사'
+      'name': '고블린'
     },
     2: {
       'baseResponseRate': 1.0,
       'declineRate': 0.04, // 4% 하락
       'responseTime': 1500,
-      'name': '중급 마법사'
+      'name': '돌 골렘'
     },
     3: {
       'baseResponseRate': 1.0,
       'declineRate': 0.0, // 0% 하락 (항상 100%)
       'responseTime': 1000,
-      'name': '전설의 드래곤'
+      'name': '드래곤'
     },
   };
   
@@ -118,9 +118,9 @@ class AIService {
   static Map<String, dynamic> getAIInfo(int stage) {
     final config = _stageConfig[stage] ?? _stageConfig[1]!;
     final descriptions = {
-      1: '매 턴마다 응답 확률이 7%씩 감소하는 초보 전사입니다.',
-      2: '매 턴마다 응답 확률이 4%씩 감소하는 숙련된 마법사입니다.',
-      3: '항상 100% 확률로 응답하는 전설의 드래곤입니다.'
+      1: '장난기 좋지만 약한 고블린입니다. 시간이 지날수록 단어를 찾지 못합니다.',
+      2: '단단한 돌로 만들어진 골렘입니다. 고블린보다 오래 버틸 수 있습니다.',
+      3: '전설의 드래곤입니다. 항상 완벽한 단어로 응답합니다.'
     };
     
     return {

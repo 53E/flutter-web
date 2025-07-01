@@ -1598,11 +1598,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String _getStageName(int stage) {
     switch (stage) {
       case 1:
-        return '초급 전사';
+        return '고블린';
       case 2:
-        return '중급 마법사';
+        return '돌 골렘';
       case 3:
-        return '전설의 드래곤';
+        return '드래곤';
       default:
         return '';
     }
@@ -1612,9 +1612,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String _getEnemyName() {
     switch (_currentStage) {
       case 1:
-        return '전사';
+        return '고블린';
       case 2:
-        return '마법사';
+        return '골렘';
       case 3:
         return '드래곤';
       default:
@@ -1928,7 +1928,236 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
   
   Widget _buildDictionaryUI(Size size) {
-    return Container(); // 기존과 동일
+    final enemies = [
+      {
+        'stage': 1,
+        'name': '고블린',
+        'description': '장난기 좋지만 약한 고블린입니다.\n시간이 지날수록 단어를 찾지 못합니다.',
+        'color': const Color(0xFF4CAF50), // 초록색
+      },
+      {
+        'stage': 2,
+        'name': '돌 골렘',
+        'description': '단단한 돌로 만들어진 골렘입니다.\n고블린보다 오래 버틸 수 있습니다.',
+        'color': const Color(0xFF795548), // 갈색
+      },
+      {
+        'stage': 3,
+        'name': '드래곤',
+        'description': '전설의 드래곤입니다.\n항상 완벽한 단어로 응답합니다.',
+        'color': const Color(0xFFFF5722), // 빨간색
+      },
+    ];
+
+    return Stack(
+      children: [
+        // 배경
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF1A1A2E),
+                Color(0xFF16213E),
+              ],
+            ),
+          ),
+        ),
+        
+        // 도감 콘텐츠
+        Positioned.fill(
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: size.width * 0.05,
+                vertical: 20,
+              ),
+              child: Column(
+                children: [
+                  // 헤더
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _showDictionary = false;
+                          });
+                        },
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '📈 적 도감',
+                        style: TextStyle(
+                          fontSize: size.width < 600 ? 24 : 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 30),
+                  
+                  // 적 리스트
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: enemies.length,
+                      itemBuilder: (context, index) {
+                        final enemy = enemies[index];
+                        final stage = enemy['stage'] as int;
+                        final name = enemy['name'] as String;
+                        final description = enemy['description'] as String;
+                        final color = enemy['color'] as Color;
+                        
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 20),
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF16213E).withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: color.withOpacity(0.5),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withOpacity(0.2),
+                                blurRadius: 15,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              // 적 이미지
+                              Container(
+                                width: size.width < 600 ? 80 : 120,
+                                height: size.width < 600 ? 100 : 150,
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(15),
+                                  border: Border.all(
+                                    color: color.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(13),
+                                  child: CharacterImage(
+                                    type: CharacterType.enemy,
+                                    state: CharacterState.idle,
+                                    stage: stage,
+                                    width: size.width < 600 ? 80 : 120,
+                                    height: size.width < 600 ? 100 : 150,
+                                    isActive: false, // 도감에서는 비활성
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(width: 20),
+                              
+                              // 적 정보
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // 단계 배지
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        borderRadius: BorderRadius.circular(15),
+                                      ),
+                                      child: Text(
+                                        'STAGE $stage',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    
+                                    const SizedBox(height: 10),
+                                    
+                                    // 적 이름
+                                    Text(
+                                      name,
+                                      style: TextStyle(
+                                        color: color,
+                                        fontSize: size.width < 600 ? 20 : 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    
+                                    const SizedBox(height: 10),
+                                    
+                                    // 설명
+                                    Text(
+                                      description,
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: size.width < 600 ? 14 : 16,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ).animate()
+                          .fadeIn(
+                            delay: Duration(milliseconds: index * 200),
+                            duration: 600.ms,
+                          )
+                          .slideX(
+                            begin: 1.0,
+                            end: 0.0,
+                            curve: Curves.easeOutCubic,
+                          );
+                      },
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // 하단 버튼
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _showDictionary = false;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C63FF),
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: size.width < 600 ? 30 : 50,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    child: const Text('메인으로 돌아가기'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
   
   Widget _buildGameOverUI(Size size) {
