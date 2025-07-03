@@ -1,0 +1,15 @@
+# Railway 배포 설정
+version: 2
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - PORT=8080
+    healthcheck:
+      path: /api/health
+      interval: 30s
+      timeout: 10s
+      retries: 3

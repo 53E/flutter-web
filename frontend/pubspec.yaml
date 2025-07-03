@@ -57,6 +57,7 @@ flutter:
     - assets/fonts/
     - assets/data/
     - assets/sounds/
+    - assets/sounds/bgm/
   
   # fonts:
   #   - family: GameFont

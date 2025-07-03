@@ -1,8 +1,14 @@
 import 'package:dio/dio.dart';
 
 class ApiService {
+  // 배포 환경에 따라 API URL 설정
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8080/api',
+  );
+  
   static final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'http://localhost:8080/api',
+    baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
   ));

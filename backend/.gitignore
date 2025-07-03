@@ -1,0 +1,31 @@
+# Backend .gitignore
+
+# Dart/Flutter
+.dart_tool/
+.packages
+pubspec.lock
+.pub/
+build/
+
+# SQLite 데이터베이스 (개발용)
+*.db
+*.sqlite
+*.sqlite3
+
+# 로그 파일
+*.log
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 환경 설정
+.env
+.env.local
+.env.production

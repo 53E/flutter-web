@@ -3,6 +3,7 @@ import 'database/database.dart';
 import 'controllers/game_controller.dart';
 import 'controllers/ranking_controller.dart';
 import 'controllers/word_controller.dart';
+import 'dart:io';
 
 void main() async {
   print('🚀 서버 시작 중...');
@@ -12,6 +13,9 @@ void main() async {
     await DatabaseManager.initialize();
     
     final app = Alfred();
+    
+    // 포트 설정 (환경변수 또는 기본값 8080)
+    final port = int.parse(Platform.environment['PORT'] ?? '8080');
 
     // CORS 설정 (Flutter Web과 통신을 위해)
     app.all('*', cors(origin: '*', headers: '*'));
@@ -117,12 +121,12 @@ void main() async {
     });
 
     // 서버 시작
-    await app.listen(8080);
+    await app.listen(port);
     
     print('✅ 서버 초기화 완료!');
-    print('🌐 서버 주소: http://localhost:8080');
-    print('📄 API 문서: http://localhost:8080/api/test');
-    print('❤️ 헬스체크: http://localhost:8080/api/health');
+    print('🌐 서버 주소: http://localhost:$port');
+    print('📄 API 문서: http://localhost:$port/api/test');
+    print('❤️ 헬스체크: http://localhost:$port/api/health');
     print('');
     print('게임 API 엔드포인트:');
     print('  POST /api/game/start');

@@ -7,6 +7,7 @@ import 'dart:html' as html; // 웹용 HTML 오디오
 import 'dart:async'; // Timer 사용
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
+import '../services/bgm_service.dart'; // BGM 서비스 추가
 import '../utils/double_consonant_utils.dart';
 import '../widgets/character_image.dart';
 
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _showDictionary = false;
   bool _isWaitingForAI = false;
   bool _serverConnected = false;
+  bool _isTransitioning = false; // 페이드 전환 상태
   
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _wordController = TextEditingController();
@@ -72,6 +74,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    
+    // BGM 서비스 초기화
+    _initializeBGM();
     
     // 사운드 플레이어 초기화
     _audioPlayer = AudioPlayer();
@@ -202,6 +207,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
   
+  // BGM 초기화
+  Future<void> _initializeBGM() async {
+    try {
+      await BGMService().initialize();
+      final isEnabled = BGMService().isEnabled;
+      print('🎵 BGM 서비스 초기화 완료 - 상태: ${isEnabled ? "켜짐" : "꺼짐"}');
+      
+      if (!isEnabled) {
+        print('💡 BGM을 들으려면 우측 상단 🔇 버튼을 클릭하세요!');
+      }
+      
+      // 브라우저 autoplay 정책으로 인해 자동 시작 금지
+      // 사용자가 BGM 버튼을 클릭해야 재생됨
+    } catch (e) {
+      print('❌ BGM 서비스 초기화 실패: $e');
+    }
+  }
+  
   // 시간 초과 처리
   void _timeUp() async {
     // 플레이어 죽는 애니메이션 시작
@@ -214,6 +237,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // 2초 후 게임오버 화면 표시
     _deathAnimationTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
+        // BGM 유지 (게임 BGM 계속 재생)
+        
         setState(() {
           _gameOver = true;
           _victory = false;
@@ -312,6 +337,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // 2초 후 승리 화면 표시
         _deathAnimationTimer = Timer(const Duration(seconds: 2), () {
           if (mounted) {
+            // BGM 유지 (게임 BGM 계속 재생)
+            
             setState(() {
               _gameOver = true;
               _victory = true;
@@ -391,16 +418,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           
           // 메인 UI
-          if (_showRanking)
-            _buildRankingUI(size)
-          else if (_showDictionary)
-            _buildDictionaryUI(size)
-          else if (!_gameStarted) 
-            _buildMainMenu(size) 
-          else if (_gameOver) 
-            _buildGameOverUI(size)
-          else 
-            _buildGameUI(size),
+          AnimatedOpacity(
+            opacity: _isTransitioning ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            child: _showRanking
+              ? _buildRankingUI(size)
+              : _showDictionary
+                ? _buildDictionaryUI(size)
+                : !_gameStarted 
+                  ? _buildMainMenu(size) 
+                  : _gameOver
+                    ? _buildGameOverUI(size)
+                    : _buildGameUI(size),
+          ),
         ],
       ),
     );
@@ -409,6 +439,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildMainMenu(Size size) {
     return Stack(
       children: [
+        // BGM 컴트롤러 (우측 상단)
+        Positioned(
+          top: 40,
+          right: 20,
+          child: _buildBGMController(size),
+        ),
+        
         // 타이틀
         Positioned(
           top: size.height * 0.15,
@@ -514,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'TEST AI',
+                  'ENEMY',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: size.width < 600 ? 14 : 18,
@@ -612,6 +649,119 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ],
+    );
+  }
+  
+  // BGM 컴트롤러 위젯
+  Widget _buildBGMController(Size size) {
+    return StreamBuilder<bool>(
+      stream: Stream.periodic(const Duration(milliseconds: 100), (_) => BGMService().isEnabled),
+      builder: (context, snapshot) {
+        final bgmService = BGMService();
+        
+        return Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF16213E).withOpacity(0.8),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: bgmService.isEnabled ? const Color(0xFF50E3C2) : Colors.orange,
+              width: bgmService.isEnabled ? 1 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (bgmService.isEnabled ? Colors.black : Colors.orange).withOpacity(0.2),
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // BGM ON/OFF 버튼
+              IconButton(
+                onPressed: () async {
+                  if (bgmService.isEnabled) {
+                    // BGM 끄기
+                    await bgmService.setEnabled(false);
+                  } else {
+                    // BGM 켜기 및 즉시 재생
+                    await bgmService.setEnabled(true);
+                    
+                    // BGM 즉시 시작
+                    final currentBGM = _gameStarted ? 'game_battle' : 'main_menu';
+                    print('🎵 BGM 켜기 + 즉시 재생: $currentBGM');
+                    await bgmService.playBGM(currentBGM);
+                  }
+                  
+                  setState(() {}); // UI 업데이트
+                },
+                icon: Icon(
+                  bgmService.isEnabled ? Icons.volume_up : Icons.volume_off,
+                  color: bgmService.isEnabled ? const Color(0xFF50E3C2) : Colors.grey,
+                  size: 24,
+                ),
+                tooltip: bgmService.isEnabled ? 'BGM 끄기' : 'BGM 켜기 (클릭하면 음악 재생)',
+              ),
+              
+              // 볼륨 슬라이더
+              if (bgmService.isEnabled) ...[
+                const SizedBox(height: 5),
+                SizedBox(
+                  height: 80,
+                  width: 30,
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 12,
+                        ),
+                        activeTrackColor: const Color(0xFF50E3C2),
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: const Color(0xFF50E3C2),
+                        overlayColor: const Color(0xFF50E3C2).withOpacity(0.2),
+                      ),
+                      child: Slider(
+                        value: bgmService.volume,
+                        min: 0.0,
+                        max: 1.0,
+                        onChanged: (value) async {
+                          await bgmService.setVolume(value);
+                          
+                          // 볼륨 조절 시 BGM이 재생되지 않는다면 시작
+                          if (bgmService.isEnabled && !bgmService.isPlaying) {
+                            final currentBGM = _gameStarted ? 'game_battle' : 'main_menu';
+                            print('🎵 볼륨 조절 시 BGM 시작: $currentBGM');
+                            await bgmService.playBGM(currentBGM);
+                          }
+                          
+                          setState(() {}); // UI 업데이트
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${(bgmService.volume * 100).toInt()}%',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ).animate()
+          .fadeIn(delay: 2600.ms, duration: 800.ms)
+          .slideX(begin: 1.0, end: 0.0);
+      },
     );
   }
   
@@ -1101,9 +1251,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _startGame() async {
     if (!_serverConnected) return;
     
-    // 오디오 게임 시작 시 활성화 (브라우저 autoplay 정책 우회)
-    _initializeAudio();
+    // 1. 페이드아웃 효과 시작
+    setState(() {
+      _isTransitioning = true;
+    });
     
+    // 0.3초 페이드아웃 대기
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // 2. 게임 상태 변경
     setState(() {
       _gameStarted = true;
       _gameOver = false;
@@ -1120,6 +1276,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _stageClearInProgress = false;
       _aiCannotRespond = false;
     });
+    
+    // 3. 페이드인 효과 시작
+    await Future.delayed(const Duration(milliseconds: 100));
+    setState(() {
+      _isTransitioning = false;
+    });
+    
+    // BGM 전환: 메인 메뉴 -> 게임 배경음악
+    print('🎵 게임 시작: BGM 전환 시도');
+    if (BGMService().isEnabled) {
+      try {
+        await BGMService().fadeOut(duration: const Duration(seconds: 1));
+        await BGMService().fadeIn('game_battle', duration: const Duration(seconds: 1));
+        print('✅ 게임 BGM 전환 성공');
+      } catch (e) {
+        print('❌ BGM 전환 오류: $e');
+        // 오류 시 직접 재생 시도
+        await BGMService().playBGM('game_battle');
+      }
+    }
+    
+    // 오디오 게임 시작 시 활성화 (브라우저 autoplay 정책 우회)
+    _initializeAudio();
     
     Provider.of<GameProvider>(context, listen: false).startGame(resetStage: true);
     
@@ -1403,6 +1582,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           // 2초 후 게임오버 화면 표시
           _deathAnimationTimer = Timer(const Duration(seconds: 2), () {
             if (mounted) {
+              // BGM 유지 (게임 BGM 계속 재생)
+              
               setState(() {
                 _gameOver = true;
                 _victory = victory;
@@ -1664,9 +1845,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          setState(() {
+                            _isTransitioning = true;
+                          });
+                          
+                          await Future.delayed(const Duration(milliseconds: 300));
+                          
                           setState(() {
                             _showRanking = false;
+                          });
+                          
+                          await Future.delayed(const Duration(milliseconds: 100));
+                          setState(() {
+                            _isTransitioning = false;
                           });
                         },
                         icon: const Icon(
@@ -1900,9 +2092,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   
                   // 하단 버튼
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      setState(() {
+                        _isTransitioning = true;
+                      });
+                      
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      
                       setState(() {
                         _showRanking = false;
+                      });
+                      
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      setState(() {
+                        _isTransitioning = false;
                       });
                     },
                     style: ElevatedButton.styleFrom(
@@ -1979,9 +2182,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          setState(() {
+                            _isTransitioning = true;
+                          });
+                          
+                          await Future.delayed(const Duration(milliseconds: 300));
+                          
                           setState(() {
                             _showDictionary = false;
+                          });
+                          
+                          await Future.delayed(const Duration(milliseconds: 100));
+                          setState(() {
+                            _isTransitioning = false;
                           });
                         },
                         icon: const Icon(
@@ -2133,9 +2347,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   
                   // 하단 버튼
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      setState(() {
+                        _isTransitioning = true;
+                      });
+                      
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      
                       setState(() {
                         _showDictionary = false;
+                      });
+                      
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      setState(() {
+                        _isTransitioning = false;
                       });
                     },
                     style: ElevatedButton.styleFrom(
@@ -2418,19 +2643,56 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
   
-  void _showRankingScreen() {
+  void _showRankingScreen() async {
+    setState(() {
+      _isTransitioning = true;
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 300));
+    
     setState(() {
       _showRanking = true;
     });
-  }
-  
-  void _showDictionaryScreen() {
+    
+    await Future.delayed(const Duration(milliseconds: 100));
     setState(() {
-      _showDictionary = true;
+      _isTransitioning = false;
     });
   }
   
-  void _backToMain() {
+  void _showDictionaryScreen() async {
+    setState(() {
+      _isTransitioning = true;
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    setState(() {
+      _showDictionary = true;
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 100));
+    setState(() {
+      _isTransitioning = false;
+    });
+  }
+  
+  void _backToMain() async {
+    // 페이드아웃 효과
+    setState(() {
+      _isTransitioning = true;
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // BGM 전환: 현재 BGM -> 메인 메뉴 BGM
+    print('🎵 메인 메뉴 복귀: BGM 전환 시도');
+    if (BGMService().isEnabled) {
+      BGMService().fadeOut(duration: const Duration(seconds: 1)).then((_) {
+        BGMService().fadeIn('main_menu', duration: const Duration(seconds: 1));
+      });
+    }
+    
     setState(() {
       _showRanking = false;
       _showDictionary = false;
@@ -2439,9 +2701,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _rankingSubmitted = false;
     });
     _nameController.clear();
+    
+    // 페이드인 효과
+    await Future.delayed(const Duration(milliseconds: 100));
+    setState(() {
+      _isTransitioning = false;
+    });
   }
   
-  void _restartGame() {
+  void _restartGame() async {
+    // 페이드아웃 효과
+    setState(() {
+      _isTransitioning = true;
+    });
+    
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // BGM 유지 (게임 BGM 계속 재생)
+    
     setState(() {
       _gameStarted = false;
       _gameOver = false;
@@ -2476,6 +2753,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _timerController.reset();
     _aiTimerController.reset(); // AI 타이머도 리셋
     _deathAnimationTimer?.cancel(); // 죽는 애니메이션 타이머 취소
+    
+    // 게임 시작으로 이동
+    _startGame();
   }
   
   @override
@@ -2489,6 +2769,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _wordSlideController.dispose();
     _audioPlayer.dispose(); // 오디오 플레이어 리소스 해제
     _deathAnimationTimer?.cancel(); // 죽는 애니메이션 타이머 해제
+    BGMService().dispose(); // BGM 서비스 리소스 해제
     super.dispose();
   }
 }
