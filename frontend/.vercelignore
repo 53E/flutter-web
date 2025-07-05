@@ -1,0 +1,12 @@
+# Vercel에서 무시할 파일들
+.dart_tool/
+.packages
+pubspec.lock
+lib/
+test/
+web/
+android/
+ios/
+linux/
+macos/
+windows/
