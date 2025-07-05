@@ -1,6 +1,12 @@
 # Railway 배포용 Dockerfile
 FROM dart:stable
 
+# SQLite 설치 (중요!)
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # 작업 디렉토리 설정
 WORKDIR /app
 
