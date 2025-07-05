@@ -1,7 +1,4 @@
 {
-  "buildCommand": "flutter build web --dart-define=API_BASE_URL=https://flutter-web-production.up.railway.app/api",
-  "outputDirectory": "build/web",
-  "installCommand": "flutter pub get",
   "routes": [
     {
       "src": "/.*",
