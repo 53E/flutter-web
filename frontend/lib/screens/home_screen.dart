@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ];
       
       audio.src = possiblePaths[0]; // 기본 경로 사용
-      audio.volume = 0.3; // 볼륨 30%
+      audio.volume = 0.18; // 볼륨 18%
       audio.currentTime = 0; // 처음부터 재생
       
       audio.play().then((_) {
@@ -195,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         
         // 백업: audioplayers 사용
         try {
+          _audioPlayer.setVolume(0.18); // 볼륨 18%
           _audioPlayer.play(AssetSource('sounds/typing_sound.wav'));
           print('🔊 백업 오디오 재생 시도');
         } catch (e2) {
